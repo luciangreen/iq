@@ -17,6 +17,7 @@ Convenience entry points:
 :- reexport(output).
 :- reexport(poly).
 :- reexport(gates).
+:- reexport(prove).
 
 iq(Name) :- iq(Name, _, []).
 iq(Name, N) :- iq(Name, N, []).

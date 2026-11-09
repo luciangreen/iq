@@ -68,6 +68,34 @@ x·y·z = ¼ (x + y + z − x⊕y − x⊕z − y⊕z + x⊕y⊕z)
 
 The result is reduced mod 1 again, which cancels more terms, and built as a CNOT ladder per parity. The parities are put in Gray-code order so that neighbouring ladders cancel in the simplifier. From the definition of Toffoli, this gives the standard **6-CNOT, 7-T** circuit.
 
+## Proofs: exact equivalence by sum over paths
+
+iq **proves** every result instead of only testing it (`prolog/prove.pl`). A circuit built from H, X, CX, CCX, SWAP and phase gates acts as a *path sum*:
+
+```
+U|x⟩ = 2^(-h/2) Σ_{y ∈ {0,1}^h} e^{2πi φ(x,y)} |f(x,y)⟩
+```
+
+Here φ is an exact phase polynomial (rational turns, mod 1) and each output f_q is a GF(2) polynomial. Each H gate adds a path variable. To prove that circuit C equals U, iq appends U† written from U's **definition**, then rewrites with two sound rules:
+
+* **[Elim]** a path variable that occurs nowhere: `Σ_y 1 = 2`.
+* **[HH]** if y is not an output and every phase term containing y has coefficient ½, then `Σ_y (−1)^{y·(v⊕Q)} = 2·[v = Q]`. Drop y and substitute v := Q everywhere.
+
+If the circuit reduces to the identity, the equivalence is proved exactly, and the log is the proof. For the 3-qubit QFT:
+
+```
+compose with U† from the definition: qft†|k⟩ = 2^(-n/2) Σ_z e^{-2πi·z·k/8} |z⟩
+[HH] Σ_y2 (-1)^{y2·(x0 ⊕ y3)} = 2·[y3 = x0]  =>  y3 := x0
+[HH] Σ_y1 (-1)^{y1·(x1 ⊕ y4)} = 2·[y4 = x1]  =>  y4 := x1
+[HH] Σ_y0 (-1)^{y0·(x2 ⊕ y5)} = 2·[y5 = x2]  =>  y5 := x2
+normal form: 2^(-0/2) Σ_{} e^{2πi[0]} |q0:x0, q1:x1, q2:x2⟩
+∎ identity, so the circuit equals U exactly (global phase 0 turn)
+```
+
+Each [HH] step makes the fractional phases ¼, ⅛, … cancel exactly against the definition. The proof takes n steps and runs in polynomial time, so a 16-qubit QFT is proved in well under a second, where simulation would need a 65536 × 65536 matrix. In the Error field of `derivation/6`, `proved` means the proof succeeded. If the proof fails, for example for the approximate QFT, the leftover path sum shows exactly where the circuit and the definition differ, and iq then falls back to a numerical check for n ≤ 6. `verify(true)` also forces the simulation.
+
+The definitions used are written directly: QFT, inverse QFT, Hⁿ, chirp, CZ/CCZ/MCZ, CNOT, Toffoli, SWAP, Fredkin and iSWAP. Grover diffusion uses the identity `2|s⟩⟨s|−I = Hⁿ(2|0⟩⟨0|−I)Hⁿ`.
+
 ## Simplifier
 
 The simplifier repeats these rewrites until nothing changes:
@@ -89,20 +117,21 @@ prolog/
   synth.pl     reading circuits off reduced polynomials (Hadamard kernels, ordering, SWAPs)
   simplify.pl  peephole rewriting, approximation, CNOT+phase lowering
   derive.pl    recognition pipeline, Möbius transform, symbolic QFT, verification
+  prove.pl     path-sum semantics and [Elim]/[HH] rewriting: exact equivalence proofs
   search.pl    breadth-first search up to global phase
   sim.pl       state-vector simulation, distance, fidelity
   targets.pl   target unitaries from their definitions
   output.pl    summary, ASCII drawing, OpenQASM 3
   iq.pl        library entry point;  cli.pl  command line
 tests/test_iq.pl   plunit suite
-reference/iq/      Python implementation of the same algorithm (numpy), used as an oracle
+reference/iq/      Python implementation of the same algorithm (numpy), used as an oracle; prove.py is the path-sum prototype
 ```
 
 Phase gates are stored as `p(Qubits, Turns)` with exact rational turns, so Z, S, T, CZ and CCZ are all `p/2` with turns 1/2, 1/4, 1/8, …. They get their usual names only when printed.
 
 ## Status
 
-The Python reference in `reference/` has been run. Every target above checks out exactly against its definition: Toffoli lowers to 6 CX + 7 T, and the approximate QFT on 6 qubits keeps fidelity 0.9895 with 3 rotations removed. The Prolog version implements the same algorithm and comes with a `plunit` suite. It was written without a Prolog system available, so run the tests first:
+The Python reference in `reference/` has been run. Every target checks out against its definition, both numerically and by path-sum proof: all 16 test cases are proved, and a 16-qubit QFT is proved in 0.4 s. The approximate QFT is correctly *not* proved. The Prolog version implements the same algorithms with exact rationals and comes with a `plunit` suite. It was written without a Prolog system available, so run the tests first:
 
 ```
 swipl -g run_tests -t halt tests/test_iq.pl

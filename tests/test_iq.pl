@@ -4,7 +4,8 @@
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
 
-exact(derivation(_, _, _, _, _, E)) :- E \== none, E < 1.0e-7.
+exact(derivation(_, _, _, _, _, E)) :- ( E == proved -> true ; number(E), E < 1.0e-7 ).
+proved(derivation(_, _, _, _, _, E)) :- E == proved.
 gates(derivation(_, _, _, circ(_, Gs, _, _), _, _), Gs).
 labels(D, Ls) :- gates(D, Gs), maplist(gate_label, Gs, Ls0), msort(Ls0, Ls).
 
@@ -52,6 +53,22 @@ test(iswap) :- derive(iswap, _, [], D), exact(D).
 test(symbolic_qft_12) :- derive(qft, 12, [], D), gates(D, Gs), length(Gs, L), L =:= 12 + 66 + 6.
 
 :- end_tests(derive).
+
+:- begin_tests(prove).
+
+test(all_targets_proved, [forall(member(T-N-O, [qft-4-[], iqft-3-[], qft-4-[swaps(false)],
+        qft-3-[basis(cx)], hadamard-3-[], cz-2-[basis(cx)], ccz-3-[basis(cx)],
+        toffoli-3-[], toffoli-3-[basis(cx)], cx-2-[], swap-2-[], fredkin-3-[],
+        iswap-2-[], chirp-3-[], diffusion-3-[], mcz-4-[]]))]) :-
+    derive(T, N, O, D), proved(D).
+test(large_qft_proved) :- derive(qft, 16, [], D), proved(D).
+test(approx_not_proved) :- derive(qft, 6, [approx(0.2)], D), \+ proved(D).
+test(qft3_proof_steps) :-
+    derive(qft, 3, [], D), D = derivation(_, _, _, C, _, _),
+    prove(C, qft, true, Log),
+    include([L]>>sub_string(L, _, _, _, "[HH]"), Log, HH), length(HH, 3).
+
+:- end_tests(prove).
 
 :- begin_tests(simplify).
 

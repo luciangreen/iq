@@ -11,7 +11,11 @@ Options:
   simplify(Bool)     default true
   approx(Eps)        drop phase rotations below Eps radians
   swaps(Bool)        default true; false leaves the output qubits permuted
-  verify(Bool)       default: true for n =< 6
+  verify(Bool)       also check numerically by simulation (default: only when
+                     the path-sum proof fails, for n =< 6)
+
+Every result is first checked by an exact path-sum proof (prove.pl); the
+Error field is `proved` when that succeeds, otherwise the numeric distance.
 
 Pipeline for a target U:
   1. diagonal in some Hadamard frame H_S U H_S ?  -> phase polynomial over k
@@ -32,19 +36,38 @@ The QFT is also derived symbolically from j*k/N with no matrix at all.
 :- use_module(search).
 :- use_module(targets).
 :- use_module(output).
+:- use_module(prove).
 
 line(Fmt, Args, S) :- format(string(S), Fmt, Args).
 
 derive(Name, N0, Opts, D) :-
     target_info(Name, DN, Fixed, _), !,
     (   ( Fixed == true ; var(N0) ) -> N = DN ; N = N0 ),
+    (   option(verify(true), Opts) -> Opts1 = Opts ; Opts1 = [verify(false)|Opts] ),
+    derive_core(Name, N, Opts1, D0),
+    D0 = derivation(Nm, M, Raw, Circ, Tr0, E0),
+    prove(Circ, Name, Ok, PLog),
+    (   Ok == true
+    ->  Err = proved, Fallback = []
+    ;   ( option(verify(false), Opts) ; N > 6 )
+    ->  Err = E0, Fallback = []
+    ;   target(Name, N, U), unitary(Circ, UC),
+        distance(UC, U, Err), fidelity(U, UC, F),
+        line("Numeric check against the definition: ||U_circ - e^{iγ}U|| = ~e, fidelity ~6f",
+             [Err, F], FL),
+        Fallback = [FL]
+    ),
+    append([Tr0, ["Proof by sum over paths:"], PLog, Fallback], Tr),
+    D = derivation(Nm, M, Raw, Circ, Tr, Err).
+derive(Name, _, _, _) :-
+    throw(error(existence_error(target, Name), _)).
+
+derive_core(Name, N, Opts, D) :-
     (   Name == qft  -> derive_qft(N, false, 0, Opts, D)
     ;   Name == iqft -> derive_qft(N, true, 0, Opts, D)
     ;   target(Name, N, U),
         derive_matrix(Name, U, N, Opts, D)
     ).
-derive(Name, _, _, _) :-
-    throw(error(existence_error(target, Name), _)).
 
 % ------------------------------------------------------------ symbolic QFT
 derive_qft(N, Inverse, Shift, Opts, D) :-
@@ -256,7 +279,7 @@ finish(Name, Method, Raw, Target, Opts, Tr0, derivation(Name, Method, Raw, Circ,
     ;   G3 = G2, ApT = []
     ),
     Circ = circ(N, G3, GP, Map),
-    (   Target == none
+    (   ( Target == none ; option(verify(false), Opts) )
     ->  Err = none, VT = []
     ;   unitary(Circ, UC),
         distance(UC, Target, Err),
