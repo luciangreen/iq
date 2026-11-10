@@ -108,6 +108,21 @@ The simplifier repeats these rewrites until nothing changes:
 
 `--approx ε` also drops rotations smaller than ε radians (the approximate QFT) and reports the fidelity.
 
+## Input/output pairs
+
+`data/io_pairs.pl` (also `data/io_pairs.jsonl`) holds 200 test vectors covering every target: QFT on 1–5 qubits, inverse QFT, Hⁿ, chirp, Grover diffusion, MCZ, CX, CZ, SWAP, iSWAP, CCZ, Toffoli and Fredkin. Each pair is a basis input |k⟩ and the exact output state given by the target's definition:
+
+```prolog
+io(4, qft, 2, 1, [0-amp(1r4, 0), 1-amp(1r4, 1r4), 2-amp(1r4, 1r2), 3-amp(1r4, 3r4)]).
+%   QFT|1⟩ on 2 qubits: amplitude of |J⟩ = sqrt(P)·e^{2πiT}, P and T exact rationals
+```
+
+All 200 were checked against iq's derived circuits. `tests/test_io_pairs.pl` repeats that check in Prolog:
+
+```
+swipl -g run_tests -t halt tests/test_io_pairs.pl
+```
+
 ## Layout
 
 ```
@@ -123,7 +138,8 @@ prolog/
   targets.pl   target unitaries from their definitions
   output.pl    summary, ASCII drawing, OpenQASM 3
   iq.pl        library entry point;  cli.pl  command line
-tests/test_iq.pl   plunit suite
+tests/test_iq.pl   plunit suite;  tests/test_io_pairs.pl  checks the 200 I/O pairs
+data/              io_pairs.pl / io_pairs.jsonl test vectors
 reference/iq/      Python implementation of the same algorithm (numpy), used as an oracle; prove.py is the path-sum prototype
 ```
 
